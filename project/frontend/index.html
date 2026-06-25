@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>警示主控台 · Alert Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── 頂部列 ───────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark" id="connDot" title="連線狀態"></span>
+      <h1>警示主控台</h1>
+      <span class="topbar__sub">ALERT CONSOLE</span>
+    </div>
+    <div class="topbar__actions">
+      <button class="btn btn--ghost" id="btnToggleConfig" type="button">⚙ 連線設定</button>
+      <button class="btn btn--ghost" id="btnReload" type="button">↻ 重新載入</button>
+    </div>
+  </header>
+
+  <!-- ── 連線設定（預設收合）─────────────────────────── -->
+  <section class="panel panel--config" id="configPanel" hidden>
+    <p class="panel__hint">
+      這個頁面就是部署在這個 repo 自己的 GitHub Pages 上，<strong>repo 位置會自動偵測</strong>，
+      不需要手動填 owner / repo / branch。你只需要貼上一個有
+      <code>Contents: Read and write</code> 權限的 Fine-grained Personal Access Token，
+      就可以直接在這裡編輯規則並寫回 GitHub。Token 只會存在這台瀏覽器的 localStorage，
+      不會送到任何第三方伺服器。
+    </p>
+
+    <div class="detected-repo">
+      <span class="detected-repo__label">偵測到的部署位置</span>
+      <code id="detectedRepoText">偵測中…</code>
+    </div>
+
+    <label>GitHub Token
+      <input type="password" id="cfgToken" placeholder="github_pat_xxx..." autocomplete="off" />
+    </label>
+
+    <div class="panel__actions">
+      <button class="btn btn--primary" id="btnSaveConfig" type="button">儲存 Token 並連線</button>
+      <button class="btn btn--ghost" id="btnClearConfig" type="button">清除本機設定</button>
+      <button class="btn btn--ghost" id="btnToggleAdvanced" type="button">進階設定 ▾</button>
+    </div>
+
+    <div class="grid grid--config" id="advancedConfig" hidden>
+      <p class="panel__hint panel__hint--advanced">
+        只有在自動偵測失敗（例如使用自訂網域，不是 *.github.io），或這個 repo 的預設分支
+        不是自動偵測到的結果時，才需要手動覆寫以下欄位。
+      </p>
+      <label>Repo Owner（手動覆寫）
+        <input type="text" id="cfgOwner" placeholder="自動偵測" />
+      </label>
+      <label>Repo Name（手動覆寫）
+        <input type="text" id="cfgRepo" placeholder="自動偵測" />
+      </label>
+      <label>Branch（手動覆寫）
+        <input type="text" id="cfgBranch" placeholder="自動偵測，預設 main" />
+      </label>
+    </div>
+  </section>
+
+  <!-- ── 狀態列 ───────────────────────────────────────── -->
+  <div class="statusbar" id="statusbar">尚未連線。請先設定 GitHub 連線資訊，或直接在下方手動編輯後自行貼回 GitHub。</div>
+
+  <!-- ── 警示列表 ─────────────────────────────────────── -->
+  <main class="panel panel--list">
+    <div class="panel__head">
+      <h2>警示規則</h2>
+      <span class="count" id="ruleCount">0 筆</span>
+    </div>
+
+    <div class="rule-table__head">
+      <span>狀態</span>
+      <span>規則 / 條件</span>
+      <span>標的</span>
+      <span>啟用</span>
+      <span>操作</span>
+    </div>
+
+    <div id="ruleList" class="rule-table__body">
+      <!-- 規則卡片由 app.js 動態產生 -->
+    </div>
+
+    <div class="empty" id="emptyState" hidden>
+      <p>還沒有任何警示規則。</p>
+      <p class="empty__hint">按右下角「＋ 新增警示」建立第一筆條件。</p>
+    </div>
+  </main>
+
+  <!-- ── 浮動操作列 ───────────────────────────────────── -->
+  <div class="dock">
+    <span class="dock__pending" id="pendingBadge" hidden>● 尚有未推送的變更</span>
+    <button class="btn btn--ghost" id="btnExport" type="button">複製 JSON</button>
+    <button class="btn btn--primary btn--push" id="btnPush" type="button" disabled>⇪ 推送到 GitHub</button>
+    <button class="btn btn--accent" id="btnAdd" type="button">＋ 新增警示</button>
+  </div>
+
+</div>
+
+<!-- ── 新增 / 編輯規則：右側滑出面板 ─────────────────── -->
+<div class="overlay" id="overlay" hidden>
+  <aside class="drawer" id="drawer">
+    <div class="drawer__head">
+      <h3 id="drawerTitle">新增警示</h3>
+      <button class="icon-btn" id="btnCloseDrawer" type="button" aria-label="關閉">✕</button>
+    </div>
+
+    <form id="ruleForm" class="drawer__body">
+      <input type="hidden" id="fId" />
+
+      <label>規則名稱
+        <input type="text" id="fName" placeholder="例如：TAIEX 60MA乖離率 > 18%" required />
+      </label>
+
+      <label>標的代號
+        <input type="text" id="fSymbol" placeholder="2330.TW / 0050.TW / ^TWII / SPY / QQQ" required />
+      </label>
+
+      <label>條件類型
+        <select id="fConditionType" required>
+          <option value="ma_deviation">N日均線乖離率 / 跌破均線</option>
+          <option value="price_change_from_base">相對基準價漲跌幅</option>
+          <option value="drawdown_from_high">從歷史高點回檔</option>
+          <option value="rsi">RSI 相對強弱指標</option>
+        </select>
+      </label>
+
+      <div id="paramFields" class="param-fields"><!-- 依條件類型動態產生 --></div>
+
+      <div class="grid grid--op">
+        <label>運算子
+          <select id="fOperator">
+            <option value=">">&gt;</option>
+            <option value="<">&lt;</option>
+            <option value=">=">&gt;=</option>
+            <option value="<=">&lt;=</option>
+          </select>
+        </label>
+        <label>數值
+          <input type="number" id="fValue" step="0.01" required />
+        </label>
+      </div>
+
+      <fieldset class="notify-fieldset">
+        <legend>通知方式</legend>
+        <label class="checkbox">
+          <input type="checkbox" id="fNotifyTelegram" checked />
+          Telegram
+        </label>
+      </fieldset>
+
+      <label class="checkbox checkbox--enabled">
+        <input type="checkbox" id="fEnabled" checked />
+        啟用此規則
+      </label>
+
+      <div class="drawer__actions">
+        <button type="button" class="btn btn--ghost" id="btnCancelForm">取消</button>
+        <button type="submit" class="btn btn--primary">儲存規則</button>
+      </div>
+    </form>
+  </aside>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
