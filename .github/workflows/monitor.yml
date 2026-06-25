@@ -37,8 +37,8 @@ jobs:
 
       - name: Run monitor script
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: 8774153999:AAFim-pHToV016brczMun1n69_gdT5prsB0
+          TELEGRAM_CHAT_ID: -5377846560
         run: python scripts/main.py
 
       - name: Commit & push updated state.json
