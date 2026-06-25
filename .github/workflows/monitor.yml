@@ -1,0 +1,56 @@
+name: Market Alert Monitor
+
+# 排程：每 10 分鐘檢查一次。
+# 注意：GitHub Actions 的 schedule 只是「最快」多久跑一次，不是精準保證。
+# 平台忙碌、repo 不活躍時，實際觸發時間可能延後幾分鐘，這是 GitHub 的已知限制。
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {} # 方便手動觸發測試
+
+# 避免兩次排程重疊執行造成 state.json git push 衝突
+concurrency:
+  group: market-alert-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write # 需要寫回 state/state.json
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run monitor script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/main.py
+
+      - name: Commit & push updated state.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/state.json
+          if git diff --staged --quiet; then
+            echo "state.json 沒有變化，跳過 commit"
+          else
+            git commit -m "chore: update alert state [skip ci]"
+            # 先 pull --rebase 再 push，避免和前端寫入 rules.json 的 commit 衝突
+            git pull --rebase
+            git push
+          fi
