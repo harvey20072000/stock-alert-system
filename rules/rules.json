@@ -20,7 +20,7 @@
       "id": "tsmc_up_200pct",
       "name": "台積電從 300 元起算上漲 200%",
       "symbol": "2330.TW",
-      "enabled": true,
+      "enabled": false,
       "condition_type": "price_change_from_base",
       "operator": ">=",
       "value": 200,
