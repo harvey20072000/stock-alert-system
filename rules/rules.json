@@ -7,7 +7,7 @@
       "enabled": true,
       "condition_type": "ma_deviation",
       "operator": ">=",
-      "value": 8,
+      "value": 3,
       "params": {
         "ma_period": 60
       },
