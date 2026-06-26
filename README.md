@@ -199,7 +199,7 @@ import requests
 
 def send(token, chat_id, text):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).raise_for_status()
+    requests.post(url, json={"chat_id": chat_id, "text": text}).raise_for_status()
 ```
 
 ---

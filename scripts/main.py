@@ -38,7 +38,7 @@ def build_message(rule: dict, result) -> str:
     return (
         f"🚨 *警示觸發*\n"
         f"規則：{name}\n"
-        f"標的：`{rule['symbol']}`\n"
+        f"標的：{rule['symbol']}\n"
         f"{result.message}"
     )
 

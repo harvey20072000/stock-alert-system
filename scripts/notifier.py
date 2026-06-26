@@ -24,7 +24,7 @@ class TelegramNotifier:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         resp = requests.post(
             url,
-            json={"chat_id": self.chat_id, "text": text, "parse_mode": "MarkdownV2"},
+            json={"chat_id": self.chat_id, "text": text},
             timeout=10,
         )
         resp.raise_for_status()
