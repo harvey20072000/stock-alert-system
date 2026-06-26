@@ -4,6 +4,9 @@
    - 讀寫方式：直接呼叫 GitHub REST API（Contents endpoint）
      瀏覽器端用使用者自己貼上的 Personal Access Token 簽署請求，
      Token 只存在這台瀏覽器的 localStorage，不會經過任何中間伺服器。
+   - 新增 / 編輯 / 刪除 / 啟用切換 都會立刻寫回 GitHub（每個操作各自獨立
+     commit 一次），不需要另外按「推送」按鈕。同步進行中會鎖住清單避免
+     並發操作互相衝突；若同步失敗，畫面上的變更會自動還原並提示錯誤。
    - 如果不想用 Token 直接寫回 GitHub，也可以用「複製 JSON」按鈕，
      把目前的規則手動貼到 GitHub 網頁版編輯器存檔（零風險、但要手動）。
    ============================================================ */
@@ -42,7 +45,7 @@ const state = {
   config: null,
   rules: [],
   fileSha: null,
-  dirty: false,
+  syncing: false, // 是否有一次「寫回 GitHub」正在進行中，用來避免並發衝突
 };
 
 // ── DOM 參照 ─────────────────────────────────────────────
@@ -52,8 +55,7 @@ const statusbar = el("statusbar");
 const ruleList = el("ruleList");
 const ruleCount = el("ruleCount");
 const emptyState = el("emptyState");
-const pendingBadge = el("pendingBadge");
-const btnPush = el("btnPush");
+const syncIndicator = el("syncIndicator");
 
 // ============================================================
 // 設定面板：自動偵測 repo 位置 + Token 輸入
@@ -248,8 +250,6 @@ async function fetchRulesFromGitHub() {
     const parsed = JSON.parse(jsonText);
     state.rules = parsed.rules || [];
     state.fileSha = data.sha;
-    state.dirty = false;
-    updatePendingUI();
     setConnected(true);
     setStatus(`已連線，讀取到 ${state.rules.length} 筆規則。`, "ok");
     renderRules();
@@ -260,45 +260,34 @@ async function fetchRulesFromGitHub() {
   }
 }
 
-async function pushRulesToGitHub() {
+/** 單純負責把目前的 state.rules 整份 PUT 回 GitHub；失敗會 throw，交給呼叫端處理 UI */
+async function syncRulesToGitHub() {
   const cfg = state.config;
-  if (!cfg) {
-    setStatus("尚未設定 GitHub 連線資訊。", "error");
-    return;
-  }
-  setStatus("推送中…", "");
-  btnPush.disabled = true;
-  try {
-    const payload = { rules: state.rules };
-    const content = b64EncodeUnicode(JSON.stringify(payload, null, 2) + "\n");
-    const body = {
-      message: `chore: update rules.json via Alert Console (${new Date().toISOString()})`,
-      content,
-      branch: cfg.branch,
-    };
-    if (state.fileSha) body.sha = state.fileSha;
+  if (!cfg) throw new Error("尚未設定 GitHub 連線資訊");
 
-    const res = await fetch(apiUrl(cfg), {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    state.fileSha = data.content.sha;
-    state.dirty = false;
-    updatePendingUI();
-    setStatus("已成功推送到 GitHub，下次排程執行就會套用新規則。", "ok");
-  } catch (err) {
-    console.error(err);
-    setStatus(`推送失敗：${err.message}`, "error");
-  } finally {
-    btnPush.disabled = !state.dirty;
+  const payload = { rules: state.rules };
+  const content = b64EncodeUnicode(JSON.stringify(payload, null, 2) + "\n");
+  const body = {
+    message: `chore: update rules.json via Alert Console (${new Date().toISOString()})`,
+    content,
+    branch: cfg.branch,
+  };
+  if (state.fileSha) body.sha = state.fileSha;
+
+  const res = await fetch(apiUrl(cfg), {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
   }
+  const data = await res.json();
+  state.fileSha = data.content.sha;
 }
 
 function setConnected(ok) {
@@ -313,15 +302,52 @@ function setStatus(text, kind) {
   if (kind === "ok") statusbar.classList.add("is-ok");
 }
 
-function markDirty() {
-  state.dirty = true;
-  updatePendingUI();
+/** 鎖住清單、停用「新增」按鈕，避免同步進行中又觸發另一次衝突的寫入 */
+function setBusy(isBusy) {
+  state.syncing = isBusy;
+  ruleList.classList.toggle("is-syncing", isBusy);
+  el("btnAdd").disabled = isBusy;
+  if (syncIndicator) {
+    syncIndicator.textContent = isBusy ? "⏳ 同步中…" : "● 即時同步";
+    syncIndicator.classList.toggle("is-busy", isBusy);
+  }
 }
 
-function updatePendingUI() {
-  pendingBadge.hidden = !state.dirty;
-  btnPush.disabled = !state.dirty || !state.config;
-  btnPush.classList.toggle("has-pending", state.dirty);
+/**
+ * 所有「會改變規則」的操作（新增/編輯/刪除/啟用切換）統一從這裡進來：
+ *   1. 先記住目前的 state.rules 當作還原點
+ *   2. 執行 mutateFn 直接修改 state.rules（樂觀更新，畫面馬上反應）
+ *   3. 立刻呼叫 syncRulesToGitHub() 寫回 GitHub
+ *   4. 失敗就整個還原回步驟1的狀態，並提示錯誤；不會留下「畫面跟 GitHub 不一致」的情況
+ */
+async function applyAndSync(mutateFn, successMsg) {
+  if (state.syncing) {
+    setStatus("正在同步上一個變更，請稍候再試一次。", "error");
+    return false;
+  }
+
+  const snapshotRules = JSON.parse(JSON.stringify(state.rules));
+  const snapshotSha = state.fileSha;
+
+  setBusy(true);
+  mutateFn();
+  renderRules();
+  setStatus("同步到 GitHub 中…", "");
+
+  try {
+    await syncRulesToGitHub();
+    setStatus(successMsg || "已同步到 GitHub，下次排程執行就會套用新規則。", "ok");
+    return true;
+  } catch (err) {
+    console.error(err);
+    state.rules = snapshotRules;
+    state.fileSha = snapshotSha;
+    renderRules();
+    setStatus(`同步失敗，變更已還原：${err.message}`, "error");
+    return false;
+  } finally {
+    setBusy(false);
+  }
 }
 
 // ============================================================
@@ -373,17 +399,21 @@ function renderRuleRow(rule) {
     </div>
   `;
 
-  row.querySelector(".js-enable-toggle").addEventListener("change", (e) => {
-    rule.enabled = e.target.checked;
-    row.querySelector(".led").className = `led ${ledClass(rule)}`;
-    markDirty();
+  row.querySelector(".js-enable-toggle").addEventListener("change", async (e) => {
+    const next = e.target.checked;
+    await applyAndSync(
+      () => {
+        rule.enabled = next;
+      },
+      `已${next ? "啟用" : "停用"}「${rule.name || rule.id}」，已同步到 GitHub。`
+    );
   });
   row.querySelector(".js-edit").addEventListener("click", () => openDrawer(rule));
-  row.querySelector(".js-delete").addEventListener("click", () => {
-    if (!confirm(`確定要刪除規則「${rule.name || rule.id}」嗎？`)) return;
-    state.rules = state.rules.filter((r) => r.id !== rule.id);
-    markDirty();
-    renderRules();
+  row.querySelector(".js-delete").addEventListener("click", async () => {
+    if (!confirm(`確定要刪除規則「${rule.name || rule.id}」嗎？這會立刻同步到 GitHub。`)) return;
+    await applyAndSync(() => {
+      state.rules = state.rules.filter((r) => r.id !== rule.id);
+    }, `已刪除「${rule.name || rule.id}」，已同步到 GitHub。`);
   });
 
   return row;
@@ -453,7 +483,7 @@ function slugify(name, symbol) {
   return `${base || "rule"}_${Date.now().toString(36)}`;
 }
 
-ruleForm.addEventListener("submit", (e) => {
+ruleForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const conditionType = el("fConditionType").value;
@@ -464,6 +494,7 @@ ruleForm.addEventListener("submit", (e) => {
 
   const id = el("fId").value || slugify(el("fName").value, el("fSymbol").value);
   const notify = el("fNotifyTelegram").checked ? ["telegram"] : [];
+  const isEdit = Boolean(el("fId").value);
 
   const ruleData = {
     id,
@@ -478,17 +509,29 @@ ruleForm.addEventListener("submit", (e) => {
     created_at: new Date().toISOString(),
   };
 
-  const existingIdx = state.rules.findIndex((r) => r.id === id);
-  if (existingIdx >= 0) {
-    ruleData.created_at = state.rules[existingIdx].created_at || ruleData.created_at;
-    state.rules[existingIdx] = ruleData;
-  } else {
-    state.rules.push(ruleData);
-  }
+  const submitBtn = ruleForm.querySelector('button[type="submit"]');
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "同步到 GitHub 中…";
 
-  markDirty();
-  renderRules();
-  closeDrawer();
+  const ok = await applyAndSync(
+    () => {
+      const existingIdx = state.rules.findIndex((r) => r.id === id);
+      if (existingIdx >= 0) {
+        ruleData.created_at = state.rules[existingIdx].created_at || ruleData.created_at;
+        state.rules[existingIdx] = ruleData;
+      } else {
+        state.rules.push(ruleData);
+      }
+    },
+    `已${isEdit ? "更新" : "新增"}「${ruleData.name || ruleData.id}」，已同步到 GitHub。`
+  );
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = originalLabel;
+
+  // 同步失敗時不關閉抽屜，讓使用者可以直接按一次「儲存規則」重試，不用重新輸入
+  if (ok) closeDrawer();
 });
 
 // ============================================================
@@ -498,8 +541,6 @@ el("btnReload").addEventListener("click", () => {
   if (state.config) fetchRulesFromGitHub();
   else setStatus("尚未設定 GitHub 連線資訊，無法重新載入。", "error");
 });
-
-el("btnPush").addEventListener("click", pushRulesToGitHub);
 
 el("btnExport").addEventListener("click", async () => {
   const text = JSON.stringify({ rules: state.rules }, null, 2);

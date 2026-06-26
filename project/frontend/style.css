@@ -121,7 +121,6 @@ body {
 .btn--ghost { background: transparent; }
 .btn--primary { background: var(--accent-armed); color: #052A1F; border-color: var(--accent-armed); }
 .btn--accent { background: var(--accent-edit); color: #2B1C00; border-color: var(--accent-edit); }
-.btn--push.has-pending { box-shadow: 0 0 0 3px var(--accent-edit-dim); border-color: var(--accent-edit); }
 
 .icon-btn {
   background: none;
@@ -232,6 +231,14 @@ input:focus, select:focus {
   border-bottom: 1px solid var(--border);
 }
 
+.rule-table__body {
+  transition: opacity 0.15s ease;
+}
+.rule-table__body.is-syncing {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .rule-row {
   display: grid;
   grid-template-columns: 44px 1fr 110px 60px 140px;
@@ -335,12 +342,14 @@ input:focus, select:focus {
   padding: 8px 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
-.dock__pending {
+.dock__synced {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--accent-edit);
+  color: var(--accent-armed);
   padding-left: 6px;
+  white-space: nowrap;
 }
+.dock__synced.is-busy { color: var(--accent-edit); }
 .dock .btn { border-radius: 999px; }
 
 /* ── Drawer / overlay ───────────────────────────────── */
