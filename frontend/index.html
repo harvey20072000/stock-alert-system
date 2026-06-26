@@ -74,8 +74,11 @@
   <!-- ── 警示列表 ─────────────────────────────────────── -->
   <main class="panel panel--list">
     <div class="panel__head">
-      <h2>警示規則</h2>
-      <span class="count" id="ruleCount">0 筆</span>
+      <div class="panel__head-left">
+        <h2>警示規則</h2>
+        <span class="count" id="ruleCount">0 筆</span>
+      </div>
+      <button class="btn btn--ghost btn--sm" id="btnResetAll" type="button" title="將所有已觸發規則的狀態重置為未觸發">↺ 全部重置</button>
     </div>
 
     <div class="rule-table__head">

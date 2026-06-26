@@ -121,6 +121,7 @@ body {
 .btn--ghost { background: transparent; }
 .btn--primary { background: var(--accent-armed); color: #052A1F; border-color: var(--accent-armed); }
 .btn--accent { background: var(--accent-edit); color: #2B1C00; border-color: var(--accent-edit); }
+.btn--sm { font-size: 11.5px; padding: 6px 10px; }
 
 .icon-btn {
   background: none;
@@ -131,6 +132,9 @@ body {
   line-height: 1;
 }
 .icon-btn:hover { color: var(--text-primary); }
+/* 重置按鈕：懸停時變為觸發色，給用戶明確的雞示反饋 */
+.icon-btn.js-reset { color: var(--accent-triggered); opacity: 0.85; }
+.icon-btn.js-reset:hover { opacity: 1; filter: brightness(1.2); }
 
 /* ── Panels ─────────────────────────────────────────── */
 .panel {
@@ -143,9 +147,14 @@ body {
 
 .panel__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+.panel__head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 .panel__head h2 { font-size: 15px; margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .count { font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); }

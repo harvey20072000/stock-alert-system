@@ -13,9 +13,9 @@
 
 const TOKEN_STORAGE_KEY = "alertConsole.githubToken";
 const OVERRIDE_STORAGE_KEY = "alertConsole.repoOverride";
-// rules.json 在 repo 裡的固定路徑，對應這個專案自己的目錄結構。
-// 如果你把 rules.json 搬到別的位置，改這個常數就好，不需要在 UI 上額外曝露這個設定。
+// rules.json / state.json 在 repo 裡的固定路徑。
 const RULES_PATH = "rules/rules.json";
+const STATE_PATH = "state/state.json";
 
 /** 每種 condition_type 對應要顯示哪些 params 欄位 */
 const PARAM_SCHEMAS = {
@@ -45,6 +45,8 @@ const state = {
   config: null,
   rules: [],
   fileSha: null,
+  alertState: {}, // state.json 的內容：{ [rule_id]: { is_triggered, last_value, ... } }
+  stateSha: null, // state.json 的 GitHub SHA（PUT 時需要）
   syncing: false, // 是否有一次「寫回 GitHub」正在進行中，用來避免並發衝突
 };
 
@@ -204,10 +206,13 @@ async function connectWithResolvedConfig(token, owner, repo, branchOverride) {
 }
 
 // ============================================================
-// GitHub Contents API：讀取 / 寫入 rules.json
+// GitHub Contents API：讀取 / 寫入 rules.json 和 state.json
 // ============================================================
 function apiUrl(cfg) {
   return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${RULES_PATH}`;
+}
+function stateApiUrl(cfg) {
+  return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${STATE_PATH}`;
 }
 
 /** base64 <-> Unicode 字串（規則名稱含中文，需正確處理 UTF-8） */
@@ -251,6 +256,10 @@ async function fetchRulesFromGitHub() {
     state.rules = parsed.rules || [];
     state.fileSha = data.sha;
     setConnected(true);
+
+    // 同時讀取 state.json（取得真實觸發狀態），失敗不影響主流程
+    await fetchAlertStateFromGitHub();
+
     setStatus(`已連線，讀取到 ${state.rules.length} 筆規則。`, "ok");
     renderRules();
   } catch (err) {
@@ -258,6 +267,59 @@ async function fetchRulesFromGitHub() {
     setConnected(false);
     setStatus(`連線失敗：${err.message}`, "error");
   }
+}
+
+/** 讀取 state/state.json，取得每條規則的即時觸發狀態 */
+async function fetchAlertStateFromGitHub() {
+  const cfg = state.config;
+  if (!cfg) return;
+  try {
+    const res = await fetch(`${stateApiUrl(cfg)}?ref=${encodeURIComponent(cfg.branch)}`, {
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (res.status === 404) {
+      state.alertState = {};
+      state.stateSha = null;
+      return;
+    }
+    if (!res.ok) return; // 靜默失敗，不影響規則讀取
+    const data = await res.json();
+    const jsonText = b64DecodeUnicode(data.content);
+    state.alertState = JSON.parse(jsonText);
+    state.stateSha = data.sha;
+  } catch (err) {
+    console.warn("讀取 state.json 失敗（不影響規則管理）：", err);
+    state.alertState = {};
+    state.stateSha = null;
+  }
+}
+
+/** 把修改後的 alertState 整份 PUT 回 GitHub state.json */
+async function syncAlertStateToGitHub() {
+  const cfg = state.config;
+  if (!cfg) throw new Error("尚未設定 GitHub 連線資訊");
+  const content = b64EncodeUnicode(JSON.stringify(state.alertState, null, 2) + "\n");
+  const body = {
+    message: `chore: reset alert state via Alert Console (${new Date().toISOString()})`,
+    content,
+    branch: cfg.branch,
+  };
+  if (state.stateSha) body.sha = state.stateSha;
+  const res = await fetch(stateApiUrl(cfg), {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  state.stateSha = data.content.sha;
 }
 
 /** 單純負責把目前的 state.rules 整份 PUT 回 GitHub；失敗會 throw，交給呼叫端處理 UI */
@@ -369,12 +431,22 @@ function exprLabel(rule) {
   return `${left} ${rule.operator} ${rule.value}`;
 }
 
+/** 根據從 state.json 讀到的真實狀態決定 LED 樣式 */
 function ledClass(rule) {
   if (!rule.enabled) return "is-disabled";
-  // 前端本身不會去打 yfinance 拿即時報價，是否「觸發」這個資訊
-  // 來自 GitHub Actions 寫回的 state.json（這裡先用靜態占位邏輯，
-  // 之後可以擴充成讀取 state/state.json 來顯示真正的即時狀態）。
+  const rs = state.alertState[rule.id];
+  if (rs && rs.is_triggered) return "is-triggered";
   return "is-armed";
+}
+
+/** 取得規則最後一次檢查的數值（用於 tooltip） */
+function stateTooltip(rule) {
+  const rs = state.alertState[rule.id];
+  if (!rs) return "尚無歷史資料";
+  const val = rs.last_value !== undefined ? `目前值: ${rs.last_value}` : "";
+  const checked = rs.last_checked_at ? `\n上次檢查: ${rs.last_checked_at.slice(0, 19).replace("T", " ")}` : "";
+  const triggered = rs.last_triggered_at ? `\n上次觸發: ${rs.last_triggered_at.slice(0, 19).replace("T", " ")}` : "";
+  return `${val}${checked}${triggered}`;
 }
 
 function renderRuleRow(rule) {
@@ -382,8 +454,13 @@ function renderRuleRow(rule) {
   row.className = "rule-row";
   row.dataset.id = rule.id;
 
+  const isTriggered = rule.enabled && state.alertState[rule.id]?.is_triggered;
+  const resetBtnHtml = isTriggered
+    ? `<button class="icon-btn js-reset" type="button" title="重置觸發狀態">↺</button>`
+    : ``;
+
   row.innerHTML = `
-    <span class="led ${ledClass(rule)}"></span>
+    <span class="led ${ledClass(rule)}" title="${escapeHtml(stateTooltip(rule))}"></span>
     <div class="rule-row__main">
       <span class="rule-row__name">${escapeHtml(rule.name || rule.id)}</span>
       <span class="rule-row__expr">${escapeHtml(exprLabel(rule))}</span>
@@ -394,6 +471,7 @@ function renderRuleRow(rule) {
       <span class="toggle__track"></span>
     </label>
     <div class="rule-row__ops">
+      ${resetBtnHtml}
       <button class="icon-btn js-edit" type="button" title="編輯">✎</button>
       <button class="icon-btn js-delete" type="button" title="刪除">🗑</button>
     </div>
@@ -416,7 +494,102 @@ function renderRuleRow(rule) {
     }, `已刪除「${rule.name || rule.id}」，已同步到 GitHub。`);
   });
 
+  // 單筆重置按鈕（只有 is_triggered=true 的規則才有）
+  const resetBtn = row.querySelector(".js-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => resetSingleRuleState(rule));
+  }
+
   return row;
+}
+
+/**
+ * 重置單一規則的觸發狀態（is_triggered → false）。
+ * 下次 Actions 排程執行時，只要條件仍成立就會再發一次通知。
+ */
+async function resetSingleRuleState(rule) {
+  if (!state.config) {
+    setStatus("尚未連線，無法重置狀態。", "error");
+    return;
+  }
+  if (state.syncing) {
+    setStatus("正在同步上一個變更，請稍候再試。", "error");
+    return;
+  }
+
+  const name = rule.name || rule.id;
+  setBusy(true);
+  setStatus(`重置「${name}」的觸發狀態中…`, "");
+
+  const snapshot = JSON.parse(JSON.stringify(state.alertState));
+  const snapshotSha = state.stateSha;
+
+  try {
+    if (state.alertState[rule.id]) {
+      state.alertState[rule.id].is_triggered = false;
+    }
+    await syncAlertStateToGitHub();
+    renderRules();
+    setStatus(`已重置「${name}」的觸發狀態，下次條件成立時將重新通知。`, "ok");
+  } catch (err) {
+    console.error(err);
+    state.alertState = snapshot;
+    state.stateSha = snapshotSha;
+    renderRules();
+    setStatus(`重置失敗：${err.message}`, "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+/**
+ * 重置「所有」已觸發規則的 is_triggered → false。
+ */
+async function resetAllTriggeredStates() {
+  if (!state.config) {
+    setStatus("尚未連線，無法重置狀態。", "error");
+    return;
+  }
+  if (state.syncing) {
+    setStatus("正在同步上一個變更，請稍候再試。", "error");
+    return;
+  }
+
+  const triggeredNames = state.rules
+    .filter((r) => state.alertState[r.id]?.is_triggered)
+    .map((r) => r.name || r.id);
+
+  if (triggeredNames.length === 0) {
+    setStatus("目前沒有任何已觸發的規則需要重置。", "ok");
+    return;
+  }
+
+  if (!confirm(`確定要重置以下 ${triggeredNames.length} 筆已觸發規則的狀態？\n${triggeredNames.join("\n")}\n\n重置後，下次條件成立時將重新發送通知。`)) return;
+
+  setBusy(true);
+  setStatus("重置所有觸發狀態中…", "");
+
+  const snapshot = JSON.parse(JSON.stringify(state.alertState));
+  const snapshotSha = state.stateSha;
+
+  try {
+    Object.keys(state.alertState).forEach((id) => {
+      if (state.alertState[id].is_triggered) {
+        state.alertState[id].is_triggered = false;
+      }
+    });
+    await syncAlertStateToGitHub();
+    renderRules();
+    setStatus(`已重置 ${triggeredNames.length} 筆規則的觸發狀態，下次條件成立時將重新通知。`, "ok");
+  } catch (err) {
+    console.error(err);
+    state.alertState = snapshot;
+    state.stateSha = snapshotSha;
+    renderRules();
+    setStatus(`重置失敗：${err.message}`, "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function escapeHtml(str) {
@@ -541,6 +714,8 @@ el("btnReload").addEventListener("click", () => {
   if (state.config) fetchRulesFromGitHub();
   else setStatus("尚未設定 GitHub 連線資訊，無法重新載入。", "error");
 });
+
+el("btnResetAll").addEventListener("click", resetAllTriggeredStates);
 
 el("btnExport").addEventListener("click", async () => {
   const text = JSON.stringify({ rules: state.rules }, null, 2);
