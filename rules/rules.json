@@ -2,12 +2,12 @@
   "rules": [
     {
       "id": "taiex_ma60_deviation",
-      "name": "TAIEX 60日均線乖離率 > 3%",
+      "name": "TAIEX 60日均線乖離率 > 5%",
       "symbol": "^TWII",
       "enabled": true,
       "condition_type": "ma_deviation",
       "operator": ">",
-      "value": 3,
+      "value": 5,
       "params": {
         "ma_period": 60
       },
