@@ -1,11 +1,11 @@
 name: Market Alert Monitor
 
-# 排程：每 10 分鐘檢查一次。
+# 排程：每 30 分鐘檢查一次。
 # 注意：GitHub Actions 的 schedule 只是「最快」多久跑一次，不是精準保證。
 # 平台忙碌、repo 不活躍時，實際觸發時間可能延後幾分鐘，這是 GitHub 的已知限制。
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch: {} # 方便手動觸發測試
 
 # 避免兩次排程重疊執行造成 state.json git push 衝突
