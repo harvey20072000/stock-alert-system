@@ -79,6 +79,7 @@ def main() -> int:
 
             if need_notify:
                 text = build_message(rule, result)
+                print(f"預計傳送內容：{text}")
                 if "telegram" in rule.get("notify", ["telegram"]):
                     if notifier is None:
                         raise RuntimeError(notifier_error)
