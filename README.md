@@ -1,7 +1,7 @@
 # 股票 / ETF / 指數條件警示系統（MVP）
 
 零伺服器成本、單人使用的市場條件監控系統。
-設定一次警示條件，之後每 10 分鐘自動檢查，符合條件就推 Telegram 通知。
+設定一次警示條件，之後每 30 分鐘自動檢查，符合條件就推 Telegram 通知。
 
 ## 系統架構
 
@@ -17,7 +17,7 @@ flowchart TD
     end
 
     subgraph Actions["GitHub Actions（排程, 免費 2000分/月）"]
-        CRON[monitor.yml<br/>每10分鐘觸發]
+        CRON[monitor.yml<br/>每30分鐘觸發]
         PY[main.py<br/>Rule Engine 判斷]
     end
 
@@ -39,7 +39,7 @@ flowchart TD
 - 前端寫回規則，不是透過自架後端，而是瀏覽器直接呼叫 **GitHub Contents API**
   幫你 commit `rules.json`（細節見下方「前端如何儲存規則」）。
 - 排程運算用 GitHub Actions 的免費額度（public repo 完全免費；private repo
-  每月有 2,000 分鐘免費額度，這個專案每次執行只需要幾十秒，每天 144 次也綽綽有餘）。
+  每月有 2,000 分鐘免費額度，這個專案每次執行只需要幾十秒，每天 48 次也綽綽有餘）。
 - 狀態保存（避免重複通知）也是讓 Actions 自己 `git commit` 回 `state.json`，
   不需要額外的資料庫或 KV 服務。
 
@@ -73,7 +73,7 @@ project/
 │   └── state.json             # 每個規則目前是否已觸發（後端讀寫，避免重複通知）
 │
 ├── .github/workflows/
-│   ├── monitor.yml            # 每10分鐘跑一次 main.py
+│   ├── monitor.yml            # 每30分鐘跑一次 main.py
 │   └── deploy-pages.yml       # frontend/ 變更時自動部署到 GitHub Pages
 │
 └── README.md
