@@ -2,7 +2,7 @@
   "rules": [
     {
       "id": "taiex_60ma_乖離率_18_mqudqekw",
-      "name": "TAIEX 60MA 乖離率>=18%",
+      "name": "TAIEX 60MA 乖離率>=3%",
       "symbol": "^TWII",
       "enabled": true,
       "condition_type": "ma_deviation",
