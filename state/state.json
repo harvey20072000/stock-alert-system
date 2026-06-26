@@ -1,12 +1,12 @@
 {
   "taiex_ma60_deviation": {
-    "is_triggered": true,
+    "is_triggered": false,
     "last_value": 8.6034,
     "last_checked_at": "2026-06-26T13:24:50.775204+08:00",
     "last_triggered_at": "2026-06-26T13:09:18.757253+08:00"
   },
   "tsmc_up_200pct": {
-    "is_triggered": true,
+    "is_triggered": false,
     "last_value": 678.3333,
     "last_checked_at": "2026-06-26T13:24:50.980883+08:00",
     "last_triggered_at": "2026-06-20T14:30:05+08:00"
