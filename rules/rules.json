@@ -2,16 +2,18 @@
   "rules": [
     {
       "id": "taiex_ma60_deviation",
-      "name": "TAIEX 60日均線乖離率 > 18%",
+      "name": "TAIEX 60日均線乖離率 > 3%",
       "symbol": "^TWII",
       "enabled": true,
       "condition_type": "ma_deviation",
       "operator": ">",
-      "value": 18,
+      "value": 3,
       "params": {
         "ma_period": 60
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     },
     {
@@ -25,7 +27,9 @@
       "params": {
         "base_price": 300
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     },
     {
@@ -39,7 +43,9 @@
       "params": {
         "lookback_days": 1260
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     },
     {
@@ -53,7 +59,9 @@
       "params": {
         "ma_period": 120
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     },
     {
@@ -67,7 +75,9 @@
       "params": {
         "rsi_period": 14
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     },
     {
@@ -81,7 +91,9 @@
       "params": {
         "rsi_period": 14
       },
-      "notify": ["telegram"],
+      "notify": [
+        "telegram"
+      ],
       "created_at": "2026-06-25T00:00:00+08:00"
     }
   ]
