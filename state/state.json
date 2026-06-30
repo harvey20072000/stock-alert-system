@@ -1,6 +1,6 @@
 {
   "taiex_ma60_deviation": {
-    "is_triggered": true,
+    "is_triggered": false,
     "last_value": 11.8017,
     "last_checked_at": "2026-06-30T12:19:34.441093+08:00",
     "last_triggered_at": "2026-06-26T17:57:53.412319+08:00"
