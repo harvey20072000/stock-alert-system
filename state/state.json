@@ -2,7 +2,7 @@
   "taiex_ma60_deviation": {
     "is_triggered": false,
     "last_value": 0.2192,
-    "last_checked_at": "2026-08-22T03:07:33.813224+08:00",
+    "last_checked_at": "2026-08-22T03:46:33.919764+08:00",
     "last_triggered_at": "2026-06-26T17:57:53.412319+08:00"
   },
   "tsmc_up_200pct": {
@@ -14,19 +14,19 @@
   "0050_drawdown_20pct": {
     "is_triggered": false,
     "last_value": 7.2425,
-    "last_checked_at": "2026-08-22T03:07:33.968359+08:00",
+    "last_checked_at": "2026-08-22T03:46:34.187568+08:00",
     "last_triggered_at": null
   },
   "qqq_break_ma120": {
     "is_triggered": false,
-    "last_value": 5.2562,
-    "last_checked_at": "2026-08-22T03:07:34.232160+08:00",
+    "last_value": 5.3133,
+    "last_checked_at": "2026-08-22T03:46:34.409578+08:00",
     "last_triggered_at": "2026-07-30T04:51:03.386089+08:00"
   },
   "spy_rsi_overbought": {
     "is_triggered": false,
-    "last_value": 54.5848,
-    "last_checked_at": "2026-08-22T03:07:34.488518+08:00",
+    "last_value": 54.7593,
+    "last_checked_at": "2026-08-22T03:46:34.637911+08:00",
     "last_triggered_at": null
   }
 }
